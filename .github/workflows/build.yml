@@ -8,40 +8,39 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find and extract ZIP
+      - name: Locate and extract ZIP
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
+          ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)"
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP tidak ditemukan di root repository."
+            echo "ERROR: ZIP tidak ditemukan di halaman utama repository."
             exit 1
           fi
 
           mkdir -p "$RUNNER_TEMP/eshai-project"
-          unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/eshai-project"
+          unzip -o "$ZIP_FILE" -d "$RUNNER_TEMP/eshai-project"
 
-          PROJECT_DIR=$(find "$RUNNER_TEMP/eshai-project" \
-            -name settings.gradle.kts \
-            -not -path '*/.gradle/*' \
-            -printf '%h\n' | head -n 1)
+          PROJECT_DIR="$(find "$RUNNER_TEMP/eshai-project" -name settings.gradle.kts -print -quit)"
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: settings.gradle.kts tidak ditemukan."
+            echo "ERROR: settings.gradle.kts tidak ditemukan dalam ZIP."
             find "$RUNNER_TEMP/eshai-project" -maxdepth 4 -type f
             exit 1
           fi
 
+          PROJECT_DIR="$(dirname "$PROJECT_DIR")"
+
           if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: File app/build.gradle.kts tidak ditemukan."
+            echo "ERROR: app/build.gradle.kts tidak ditemukan."
             exit 1
           fi
 
@@ -54,33 +53,32 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
- - name: Configure Android SDK
+      - name: Configure Android SDK
         shell: bash
         run: |
           echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
-          echo "/usr/local/lib/android/sdk/platform-tools" >> "$GITHUB_PATH"
 
-      - name: Accept Android SDK licenses
+      - name: Accept SDK licenses
         shell: bash
         run: |
-          yes | /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager --sdk_root=/usr/local/lib/android/sdk --licenses || true
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/usr/local/lib/android/sdk --licenses || true
 
-      - name: Install Android SDK packages
+      - name: Install SDK packages
         shell: bash
         run: |
-          /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager \
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager \
             --sdk_root=/usr/local/lib/android/sdk \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Build debug APK
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: gradle --no-daemon assembleDebug
 
